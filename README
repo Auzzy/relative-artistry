@@ -1,0 +1,5 @@
+Create a Spotify playlist of all the songs by artists related to an artist, to a specific level.
+
+Given an artist name, they're located in Spotify.
+The artists who will comprise the playlist are gathered by walking the tree of relatde artists. The depth is configurable, but I wouldn't recommend setting it higher than 3, as you'll start getting an incredible amount of results, many of which only have the slightest connection to the seed artist.
+All tracks from all albums available in the given country are then added to a new playlist, titled "<artist name> - Related Artists". If no country code is provided, then the album will be included even if it's not available in your country.
