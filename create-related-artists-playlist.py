@@ -65,6 +65,8 @@ def create_playlist(artist_name, username, track_ids):
     for offset in range(0, len(track_ids), MAX_TRACKS_ADDED):
         spotify.user_playlist_add_tracks(username, playlist_response["id"], track_ids[offset:offset + MAX_TRACKS_ADDED])
 
+    return playlist_response["external_urls"]["spotify"]
+
 def get_related_artist_ids(artist_id):
     related_artist_response = spotify.artist_related_artists(artist_id)
     return RELATED_ARTIST_ID_PATH.search(related_artist_response)
@@ -131,4 +133,7 @@ if __name__ == "__main__":
     print("Found {0} tracks across {1} artists at most {2} steps removed from {3}."
             .format(len(track_ids), len(related_artist_ids), max_depth, artist_name))
     print("Creating the playlist...")
-    create_playlist(artist_name, username, track_ids)
+    playlist_url = create_playlist(artist_name, username, track_ids)
+
+    print("Your new playlist can be listened to here:")
+    print(playlist_url)
