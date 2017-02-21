@@ -1,5 +1,19 @@
-Create a Spotify playlist of all the songs by artists related to an artist, to a specific level.
+Create a Spotify playlist of all the songs by artists related to an artist, to a
+specific depth.
 
 Given an artist name, they're located in Spotify.
-The artists who will comprise the playlist are gathered by walking the tree of relatde artists. The depth is configurable, but I wouldn't recommend setting it higher than 3, as you'll start getting an incredible amount of results, many of which only have the slightest connection to the seed artist.
-All tracks from all albums available in the given country are then added to a new playlist, titled "<artist name> - Related Artists". If no country code is provided, then the album will be included even if it's not available in your country.
+The artists who will comprise the playlist are gathered by walking the tree of
+related artists. The depth is configurable, but I wouldn't recommend setting it
+higher than 3, as you'll start getting an incredible amount of results, many of
+which only have the slightest connection to the seed artist.
+All tracks from all albums available in the given country are then added to a
+new playlist, titled "<artist name> - Related Artists". If no country code is
+provided, then the album will be included even if it's not available in your
+country.
+
+Note that Spotipy requires that you have the following 3 environment variables
+set: SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, and SPOTIPY_REDIRECT_URI. The
+client ID and secret can be obtained by registering the application with Spotify
+by going to https://developer.spotify.com/my-applications/. The redirect URI
+doesn't have to be a real site, as long as it looks like a URI. For example,
+"http://localhost" is an acceptable value.
