@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("artist", help=("The name of the artist whose related artists you're interested in. If you "
             "have their Spotify URI, you may provide that instead (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF)."))
     parser.add_argument("username", help="The username of the user for whom to create this playlist.")
-    parser.add_argument("-d", "--max-depth", default=DEFAULT_DEPTH,
+    parser.add_argument("-d", "--max-depth", type=int, default=DEFAULT_DEPTH,
             help=("The maximum depth to traverse the related artist list. A depth of 0 gets just the artist. It's "
             "recommended that this value not exceed 3, as it will start taking a long time and producing very large "
             "(and unrelated) playlists. (default: %(default)s)"))
@@ -111,9 +111,11 @@ def _prompt_for_artist(artist_ids, artist_name):
         print("{0}) {1}".format(index, artist_obj["external_urls"]["spotify"]))
 
     while True:
-        artist_index = input("Please select one by entering the corresponding number and pressing ENTER: ")
-        if artist_index.isdigit():
-            return artist_objs[int(artist_index)]
+        artist_index_str = input("Please select one by entering the corresponding number and pressing ENTER: ")
+        if artist_index_str.isdigit():
+            artist_index = int(artist_index_str)
+            if artist_index <= len(artist_obj) and artist_index > 0:
+                return artist_objs[artist_index - 1]
 
 def get_artist_id(artist_name, ask):
     search_id_path = jmespath.compile(SEARCH_ARTIST_ID_PATH_FORMAT.format(artist_name=artist_name))
