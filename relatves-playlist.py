@@ -21,6 +21,8 @@ ALBUM_ID_PATH = jmespath.compile("items[?length(@.artists)==`1`].id")
 RELATED_ARTIST_ID_PATH = jmespath.compile("artists[*].id")
 SEARCH_ARTIST_ID_PATH_FORMAT = "artists.items[?name=='{artist_name}'].{{id: id, popularity: popularity}}"
 TRACK_ID_PATH = jmespath.compile("items[*].id")
+DEFAULT_NEXT_PATH = jmespath.compile("next")
+SEARCH_ARTIST_NEXT_PATH = jmespath.compile("artists.next")
 
 
 def parse_args():
@@ -65,13 +67,14 @@ def create_playlist(artist_name, track_ids, playlist_name_format):
 
     return playlist_response["external_urls"]["spotify"]
 
-def _spotify_collect(op, request_key, value_path, halt=lambda values: False):
+def _spotify_collect(op, request_key, value_path, next_path=DEFAULT_NEXT_PATH, halt=lambda values: False):
     values = []
     offset = 0
     while True:
         result = op(request_key, limit=RESULT_LIMIT, offset=offset)
         values += value_path.search(result)
-        if halt(values) or not result["next"]:
+        next = next_path.search(result)
+        if halt(values) or not next:
             break
 
         offset += len(values)
@@ -125,7 +128,7 @@ def _prompt_for_artist(artist_ids, artist_name):
 def get_artist_id(artist_name, ask):
     search_id_path = jmespath.compile(SEARCH_ARTIST_ID_PATH_FORMAT.format(artist_name=artist_name))
     artist_search_op = functools.partial(spotify.search, type="artist")
-    exact_matches = _spotify_collect(artist_search_op, artist_name, search_id_path, halt=lambda values: values)
+    exact_matches = _spotify_collect(artist_search_op, artist_name, search_id_path, SEARCH_ARTIST_NEXT_PATH, halt=lambda values: values)
 
     if not exact_matches:
         return None
