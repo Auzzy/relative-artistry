@@ -11,6 +11,7 @@ from ordered_set import OrderedSet
 DEFAULT_COUNTRY = None
 DEFAULT_DEPTH = 1
 
+CACHE_NAME = "access-tokens"
 MAX_TRACKS_ADDED = 100
 PLAYLIST_NAME = "{artist_name} - Related Artists"
 RESULT_LIMIT = 50
@@ -24,9 +25,8 @@ TRACK_ID_PATH = jmespath.compile("items[*].id")
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("artist", help=("The name of the artist whose related artists you're interested in. If you "
-            "have their Spotify URI, you may provide that instead (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF)."))
-    parser.add_argument("username", help="The username of the user for whom to create this playlist.")
+    parser.add_argument("artist", help=("Either the artist's exact name, or their Spotify URI "
+            "(e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF)."))
     parser.add_argument("-d", "--max-depth", type=int, default=DEFAULT_DEPTH,
             help=("The maximum depth to traverse the related artist list. A depth of 0 gets just the artist. It's "
             "recommended that this value not exceed 3, as it will start taking a long time and producing very large "
@@ -43,15 +43,16 @@ def parse_args():
 
     return vars(parser.parse_args())
 
-def get_client(username):
-    token = spotipy.util.prompt_for_user_token(username, SCOPE)
+def get_client():
+    token = spotipy.util.prompt_for_user_token(CACHE_NAME, SCOPE)
     if token:
         return spotipy.Spotify(auth=token)
     else:
-        raise Exception("Failed to get token for {0}".format(username))
+        raise Exception("Failed to retrieve an access token.")
 
 
-def create_playlist(artist_name, username, track_ids):
+def create_playlist(artist_name, track_ids):
+    username = spotify.me()["id"]
     playlist_response = spotify.user_playlist_create(username, PLAYLIST_NAME.format(artist_name=artist_name), public=False)
 
     # The API only supports adding 100 tracks at a time.
@@ -139,13 +140,13 @@ def get_artist(artist_uri):
 def is_spotify_artist_uri(artist):
     return artist.startswith("spotify:artist:")
 
+
 if __name__ == "__main__":
     args = parse_args()
     artist = args["artist"]
     max_depth = args["max_depth"]
-    username = args["username"]
 
-    spotify = get_client(username)
+    spotify = get_client()
 
     print("Gathering artists...")
     if is_spotify_artist_uri(artist):
@@ -169,7 +170,7 @@ if __name__ == "__main__":
     print("Found {0} tracks across {1} artists at most {2} steps removed from \"{3}\"."
             .format(len(track_ids), len(related_artist_ids), max_depth, artist_name))
     print("Creating the playlist...")
-    playlist_url = create_playlist(artist_name, username, track_ids)
+    playlist_url = create_playlist(artist_name, track_ids)
 
     print("Your new playlist can be listened to here:")
     print(playlist_url)
