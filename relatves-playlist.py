@@ -13,7 +13,7 @@ DEFAULT_DEPTH = 1
 
 CACHE_NAME = "access-tokens"
 MAX_TRACKS_ADDED = 100
-PLAYLIST_NAME = "{artist_name} - Related Artists"
+PLAYLIST_NAME = "<artist>'s Related Artists"
 RESULT_LIMIT = 50
 SCOPE = "playlist-modify-private"
 
@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument("--ask", action="store_true",
             help=("By default, if the search finds two artists with the same exact name you specified, it will use "
             "the most popular one as the seed artist. Use this option to have it prompt you to choose instead."))
+    parser.add_argument("-n", "--playlist-name", default=PLAYLIST_NAME,
+            help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
+            "this artist's name. (default: %(default)s)"))
     # parser.add_argument("-e", "--exclude-artists", action="append")
 
     return vars(parser.parse_args())
@@ -51,9 +54,10 @@ def get_client():
         raise Exception("Failed to retrieve an access token.")
 
 
-def create_playlist(artist_name, track_ids):
+def create_playlist(artist_name, track_ids, playlist_name_format):
     username = spotify.me()["id"]
-    playlist_response = spotify.user_playlist_create(username, PLAYLIST_NAME.format(artist_name=artist_name), public=False)
+    playlist_name = playlist_name_format.replace("<artist>", artist_name)
+    playlist_response = spotify.user_playlist_create(username, playlist_name, public=False)
 
     # The API only supports adding 100 tracks at a time.
     for offset in range(0, len(track_ids), MAX_TRACKS_ADDED):
@@ -170,7 +174,7 @@ if __name__ == "__main__":
     print("Found {0} tracks across {1} artists at most {2} steps removed from \"{3}\"."
             .format(len(track_ids), len(related_artist_ids), max_depth, artist_name))
     print("Creating the playlist...")
-    playlist_url = create_playlist(artist_name, track_ids)
+    playlist_url = create_playlist(artist_name, track_ids, args["playlist_name"])
 
     print("Your new playlist can be listened to here:")
     print(playlist_url)
