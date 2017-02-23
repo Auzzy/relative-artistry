@@ -12,6 +12,7 @@ DEFAULT_COUNTRY = None
 DEFAULT_DEPTH = 1
 
 CACHE_NAME = "access-tokens"
+MAX_PLAYLIST_SIZE = 11000
 MAX_TRACKS_ADDED = 100
 PLAYLIST_NAME = "<artist>'s Related Artists"
 RESULT_LIMIT = 50
@@ -55,17 +56,32 @@ def get_client():
     else:
         raise Exception("Failed to retrieve an access token.")
 
+def _create_and_populate_playlist(playlist_name, playlist_track_ids, username):
+    playlist_response = spotify.user_playlist_create(username, playlist_name, public=False)
+
+    # The API only supports adding a certain number of tracks at a time.
+    for offset in range(0, len(playlist_track_ids), MAX_TRACKS_ADDED):
+        spotify.user_playlist_add_tracks(username, playlist_response["id"], playlist_track_ids[offset:offset + MAX_TRACKS_ADDED])
+
+    return playlist_response["external_urls"]["spotify"]
 
 def create_playlist(artist_name, track_ids, playlist_name_format):
     username = spotify.me()["id"]
-    playlist_name = playlist_name_format.replace("<artist>", artist_name)
-    playlist_response = spotify.user_playlist_create(username, playlist_name, public=False)
+    playlist_base_name = playlist_name_format.replace("<artist>", artist_name)
 
-    # The API only supports adding 100 tracks at a time.
-    for offset in range(0, len(track_ids), MAX_TRACKS_ADDED):
-        spotify.user_playlist_add_tracks(username, playlist_response["id"], track_ids[offset:offset + MAX_TRACKS_ADDED])
+    playlist_urls = []
+    if len(track_ids) <= MAX_PLAYLIST_SIZE:
+        playlist_url = _create_and_populate_playlist(playlist_base_name, track_ids, username)
+        playlist_urls.append(playlist_url)
+    else:
+        # A playlist has a maximum number of tracks. So track lists longer than that must be multiple playlists.
+        for playlist_offset in range(0, len(track_ids), MAX_PLAYLIST_SIZE):
+            playlist_name = "{0} (part {1})".format(playlist_base_name, int(playlist_offset / MAX_PLAYLIST_SIZE) + 1)
+            playlist_track_ids = track_ids[playlist_offset:playlist_offset + MAX_PLAYLIST_SIZE]
+            playlist_url = _create_and_populate_playlist(playlist_name, playlist_track_ids, username)
+            playlist_urls.append(playlist_url)
 
-    return playlist_response["external_urls"]["spotify"]
+    return playlist_urls
 
 def _spotify_collect(op, request_key, value_path, next_path=DEFAULT_NEXT_PATH, halt=lambda values: False):
     values = []
@@ -177,7 +193,12 @@ if __name__ == "__main__":
     print("Found {0} tracks across {1} artists at most {2} steps removed from \"{3}\"."
             .format(len(track_ids), len(related_artist_ids), max_depth, artist_name))
     print("Creating the playlist...")
-    playlist_url = create_playlist(artist_name, track_ids, args["playlist_name"])
+    playlist_urls = create_playlist(artist_name, track_ids, args["playlist_name"])
 
-    print("Your new playlist can be listened to here:")
-    print(playlist_url)
+    if len(playlist_urls) == 1:
+        print("Your new playlist can be listened to here:")
+    else:
+        print("Your new playlist exceeds the maximum playlist size, so multiple playlists were created.")
+
+    for playlist_url in playlist_urls:
+        print(playlist_url)
