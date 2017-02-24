@@ -38,7 +38,8 @@ def parse_args():
             help=("Only add albums available in this country to the playlist. If omitted, all albums will be added to "
             "the playlist regardless of country availability. (default: %(default)s)"))
     parser.add_argument("--include-seed", action="store_true",
-            help=("Toggles inclusion of the seed artist in the playlist. (default: %(default)s)"))
+            help=("Toggles inclusion of the seed artist in the playlist. Note that if --max-depth is 0, this will be "
+            "turned on. (default: %(default)s)"))
     parser.add_argument("--ask", action="store_true",
             help=("By default, if the search finds two artists with the same exact name you specified, it will use "
             "the most popular one as the seed artist. Use this option to have it prompt you to choose instead."))
@@ -168,6 +169,7 @@ if __name__ == "__main__":
     args = parse_args()
     artist = args["artist"]
     max_depth = args["max_depth"]
+    include_seed = args["include_seed"] or max_depth == 0
 
     spotify = get_client()
 
@@ -181,7 +183,7 @@ if __name__ == "__main__":
             raise ValueError("I'm sorry, I couldn't find an artist on Spotify whose name was an exact match for \"{0}\". "
                     "Please check the spelling and try again.".format(artist))
 
-    related_artist_ids = get_all_related_artists(artist_id, max_depth, args["include_seed"])
+    related_artist_ids = get_all_related_artists(artist_id, max_depth, include_seed)
 
     print("Collecting tracks from each artist...")
     track_ids = []
