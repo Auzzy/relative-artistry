@@ -8,7 +8,6 @@ import spotipy
 import spotipy.util
 from ordered_set import OrderedSet
 
-DEFAULT_COUNTRY = None
 DEFAULT_DEPTH = 1
 
 CACHE_NAME = "access-tokens"
@@ -16,7 +15,7 @@ MAX_PLAYLIST_SIZE = 11000
 MAX_TRACKS_ADDED = 100
 PLAYLIST_NAME = "<artist>'s Related Artists"
 RESULT_LIMIT = 50
-SCOPE = "playlist-modify-private"
+SCOPES = ["user-read-private", "playlist-modify-private"]
 
 ALBUM_ID_PATH = jmespath.compile("items[?length(@.artists)==`1`].id")
 RELATED_ARTIST_ID_PATH = jmespath.compile("artists[*].id")
@@ -34,9 +33,6 @@ def parse_args():
             help=("The maximum depth to traverse the related artist list. A depth of 0 gets just the artist. It's "
             "recommended that this value not exceed 3, as it will start taking a long time and producing very large "
             "(and unrelated) playlists. (default: %(default)s)"))
-    parser.add_argument("-c", "--country", default=DEFAULT_COUNTRY,
-            help=("Only add albums available in this country to the playlist. If omitted, all albums will be added to "
-            "the playlist regardless of country availability. (default: %(default)s)"))
     parser.add_argument("--include-seed", action="store_true",
             help=("Toggles inclusion of the seed artist in the playlist. Note that if --max-depth is 0, this will be "
             "turned on. (default: %(default)s)"))
@@ -51,7 +47,8 @@ def parse_args():
     return vars(parser.parse_args())
 
 def get_client():
-    token = spotipy.util.prompt_for_user_token(CACHE_NAME, SCOPE)
+    scope_str = " ".join(SCOPES)
+    token = spotipy.util.prompt_for_user_token(CACHE_NAME, scope_str)
     if token:
         return spotipy.Spotify(auth=token)
     else:
@@ -66,8 +63,7 @@ def _create_and_populate_playlist(playlist_name, playlist_track_ids, username):
 
     return playlist_response["external_urls"]["spotify"]
 
-def create_playlist(artist_name, track_ids, playlist_name_format):
-    username = spotify.me()["id"]
+def create_playlist(username, artist_name, track_ids, playlist_name_format):
     playlist_base_name = playlist_name_format.replace("<artist>", artist_name)
 
     playlist_urls = []
@@ -104,7 +100,7 @@ def get_related_artist_ids(artist_id):
 def get_track_ids(album_id):
     return _spotify_collect(spotify.album_tracks, album_id, TRACK_ID_PATH)
 
-def get_album_ids(artist_id, country=DEFAULT_COUNTRY):
+def get_album_ids(artist_id, country):
     full_album_op = functools.partial(spotify.artist_albums, album_type="album", country=country)
     return _spotify_collect(full_album_op, artist_id, ALBUM_ID_PATH)
 
@@ -172,6 +168,7 @@ if __name__ == "__main__":
     include_seed = args["include_seed"] or max_depth == 0
 
     spotify = get_client()
+    current_user = spotify.me()
 
     print("Gathering artists...")
     if is_spotify_artist_uri(artist):
@@ -188,14 +185,14 @@ if __name__ == "__main__":
     print("Collecting tracks from each artist...")
     track_ids = []
     for related_artist_id in related_artist_ids:
-        album_ids = get_album_ids(related_artist_id, args["country"])
+        album_ids = get_album_ids(related_artist_id, current_user["country"])
         related_artist_track_ids = itertools.chain.from_iterable(get_track_ids(album_id) for album_id in album_ids)
         track_ids.extend(list(related_artist_track_ids))
 
     print("Found {0} tracks across {1} artists at most {2} steps removed from \"{3}\"."
             .format(len(track_ids), len(related_artist_ids), max_depth, artist_name))
     print("Creating the playlist...")
-    playlist_urls = create_playlist(artist_name, track_ids, args["playlist_name"])
+    playlist_urls = create_playlist(current_user["id"], artist_name, track_ids, args["playlist_name"])
 
     if len(playlist_urls) == 1:
         print("Your new playlist can be listened to here:")
