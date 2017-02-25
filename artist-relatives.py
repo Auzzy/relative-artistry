@@ -34,6 +34,14 @@ def parse_args():
     parser.add_argument("-n", "--playlist-name", default=PLAYLIST_NAME,
             help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
             "this artist's name. (default: %(default)s)"))
+    # parser.add_argument("-e", "--exclude-artist", action="append")
+    parser.add_argument("--exclude-from-parent",
+            help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Starting "
+            "with this artist, walk their related artists tree until the seed artist is encountered. All artists "
+            "between them, including artists on the same level, are excluded.\n"
+            "For example, if Arcade Fire is the seed artist and Muse is the exlude-from-parent, Muse's direct related "
+            "artists and their direct related artists will be exlcuded, for a max of 420 artists excluded (probably "
+            "far less due to duplicates)."))
 
     return vars(parser.parse_args())
 
