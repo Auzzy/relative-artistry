@@ -34,6 +34,16 @@ def parse_args():
     parser.add_argument("-n", "--playlist-name", default=PLAYLIST_NAME,
             help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
             "this artist's name. (default: %(default)s)"))
+    parser.add_argument("-e", "--exclude-artist", action="append",
+            help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Exclude "
+            "this artist from the list of relatives. It can be repeated to exclude multiple artists."))
+    parser.add_argument("--exclude-from-parent",
+            help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Starting "
+            "with this artist, walk their related artists tree until the seed artist is encountered. All artists "
+            "between them, including artists on the same level, are excluded.\n"
+            "For example, if Arcade Fire is the seed artist and Muse is the exlude-from-parent, Muse's direct related "
+            "artists and their direct related artists will be exlcuded, for a max of 420 artists excluded (probably "
+            "far less due to duplicates)."))
 
     return vars(parser.parse_args())
 
@@ -88,21 +98,21 @@ class ArtistRelativesApp(object):
             track_ids.extend(list(related_artist_track_ids))
         return track_ids
 
-    def _walk_relatives(self, root_artist_id, include_root, halt_condition):
-        def _visit_relatives(root_artist_id, visited_artist_ids, depth=0):
-            visited_artist_ids.add(root_artist_id)
-            
-            if not halt_condition(visited_artist_ids, depth):
-                relative_ids = OrderedSet(self.spotify_client.related_artist_ids(root_artist_id))
-        
-                # Leaves us with only the related artist IDs we've yet to visit
+    def _walk_relatives(self, root_artist_id, include_root, halt_condition, excluded_artist_ids=set()):
+        def _visit_relatives(artist_id):
+            visited_artist_ids = OrderedSet([artist_id])
+            relative_ids = OrderedSet([artist_id])
+            depth = 0
+            while not halt_condition(visited_artist_ids, depth):
+                for relative_id in relative_ids.copy():
+                    relative_ids.update(self.spotify_client.related_artist_ids(relative_id))
                 relative_ids -= visited_artist_ids
-                for artist_id in relative_ids:
-                    new_relative_ids = _visit_relatives(artist_id, visited_artist_ids, depth + 1)
-                    visited_artist_ids.update(new_relative_ids)
+                relative_ids -= excluded_artist_ids
+                visited_artist_ids.update(relative_ids)
+                depth += 1
             return visited_artist_ids
-    
-        relative_ids = _visit_relatives(root_artist_id, OrderedSet())
+
+        relative_ids = _visit_relatives(root_artist_id)
         if not include_root:
             relative_ids -= OrderedSet((root_artist_id,))
         return relative_ids
@@ -147,12 +157,19 @@ class ArtistRelativesApp(object):
                         "Please check the spelling and try again.".format(artist))
         return artist_id, artist_name
 
-    def create_relatives_playlist(self, artist, exclude_from_parent=None):
-        print("Gathering artists...")
+    def create_relatives_playlist(self, artist, excluded_artists=[], exclude_from_parent=None):
         artist_id, artist_name = self._load_artist(artist, self.ask)
 
+        excluded_artist_ids = {self._load_artist(artist)[0] for artist in excluded_artists}
+        if exclude_from_parent:
+            parent_id, parent_name = self._load_artist(exclude_from_parent, self.ask)
+            print("Discovering artists between {0} and {1}...".format(parent_name, artist_name))
+            excluded_artist_ids = self._walk_relatives(parent_id, True,
+                lambda visited_ids, depth: artist_id in visited_ids)
+
+        print("Gathering artists...")
         relative_ids = self._walk_relatives(artist_id, self.include_root,
-                lambda visited_ids, depth: depth >= self.max_depth)
+                lambda visited_ids, depth: depth >= self.max_depth, excluded_artist_ids)
 
         print("Collecting tracks from each artist...")
         track_ids = self._gather_tracks(relative_ids)
@@ -171,4 +188,5 @@ if __name__ == "__main__":
     spotify = get_client()
     artist_relatives_app = ArtistRelativesApp.create(
         spotify, args["playlist_name"], args["max_depth"], args["include_root"], args["ask"])
-    artist_relatives_app.create_relatives_playlist(args["seed_artist"])
+    artist_relatives_app.create_relatives_playlist(args["seed_artist"], args["exclude_artist"],
+        args["exclude_from_parent"])
