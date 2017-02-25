@@ -18,8 +18,9 @@ SCOPES = ["user-read-private", "playlist-modify-private"]
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("artist", help=("Either the artist's exact name, or their Spotify URI "
-            "(e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF)."))
+    parser.add_argument("seed_artist",
+            help=("Either the artist's exact name, or their Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). "
+            "This artist's related artists are the starting point."))
     parser.add_argument("-d", "--max-depth", type=int, default=DEFAULT_DEPTH,
             help=("The maximum depth to traverse the related artist list. A depth of 0 gets just the artist. It's "
             "recommended that this value not exceed 3, as it will start taking a long time and producing very large "
@@ -33,7 +34,6 @@ def parse_args():
     parser.add_argument("-n", "--playlist-name", default=PLAYLIST_NAME,
             help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
             "this artist's name. (default: %(default)s)"))
-    # parser.add_argument("-e", "--exclude-artists", action="append")
 
     return vars(parser.parse_args())
 
@@ -69,8 +69,8 @@ class ArtistRelativesApp(object):
         for playlist_url in playlist_urls:
             print(playlist_url)
 
-    def _create_playlist(self, artist_name, track_ids):
-        playlist_base_name = self.playlist_name_format.replace("<artist>", artist_name)
+    def _create_playlist(self, artist_name, track_ids, playlist_name_format):
+        playlist_base_name = playlist_name_format.replace("<artist>", artist_name)
         responses = self.spotify_client.create_playlist(playlist_base_name, self.current_user["username"], track_ids)
 
         if len(responses) > 1:
@@ -88,23 +88,22 @@ class ArtistRelativesApp(object):
             track_ids.extend(list(related_artist_track_ids))
         return track_ids
 
-    def _walk_relatives(self, root_artist_id):
-        def _visit_relatives(root_artist_id, visited_artist_ids, depth=1):
-            relative_ids = OrderedSet(self.spotify_client.related_artist_ids(root_artist_id))
-        
-            # Leaves us with only the related artist IDs we've yet to visit
-            relative_ids -= visited_artist_ids
-            visited_artist_ids.update(relative_ids)
+    def _walk_relatives(self, root_artist_id, include_root, halt_condition):
+        def _visit_relatives(root_artist_id, visited_artist_ids, depth=0):
+            visited_artist_ids.add(root_artist_id)
             
-            if depth < self.max_depth:
+            if not halt_condition(visited_artist_ids, depth):
+                relative_ids = OrderedSet(self.spotify_client.related_artist_ids(root_artist_id))
+        
+                # Leaves us with only the related artist IDs we've yet to visit
+                relative_ids -= visited_artist_ids
                 for artist_id in relative_ids:
-                    new_relative_ids = _visit_related_artists(artist_id, visited_artist_ids, depth + 1)
+                    new_relative_ids = _visit_relatives(artist_id, visited_artist_ids, depth + 1)
                     visited_artist_ids.update(new_relative_ids)
             return visited_artist_ids
     
-        visited_artist_ids = OrderedSet((root_artist_id,))
-        relative_ids = _visit_relatives(root_artist_id, visited_artist_ids) if self.max_depth > 0 else visited_artist_ids
-        if not self.include_root:
+        relative_ids = _visit_relatives(root_artist_id, OrderedSet())
+        if not include_root:
             relative_ids -= OrderedSet((root_artist_id,))
         return relative_ids
 
@@ -122,13 +121,13 @@ class ArtistRelativesApp(object):
                 if artist_index <= len(artist_obj) and artist_index > 0:
                     return artist_objs[artist_index - 1]
 
-    def _query_artist_id_by_name(self, artist_name):
+    def _query_artist_id_by_name(self, artist_name, ask=False):
         exact_matches = self.spotify_client.search_artist_ids(artist_name)
         if not exact_matches:
             return None
 
         if len(exact_matches) > 1:
-            if self.ask:
+            if ask:
                 artist_obj = self._prompt_for_artist([match["id"] for match in exact_matches], artist_name)
             else:
                 artist_obj = sorted(exact_matches, key=lambda artist: artist["popularity"], reverse=True)[0]
@@ -137,21 +136,23 @@ class ArtistRelativesApp(object):
 
         return artist_obj["id"]
 
-    def _load_artist(self, artist):
+    def _load_artist(self, artist, ask=False):
         if self.spotify_client.is_artist_uri(artist):
             artist_name, artist_id = self.spotify_client.get_artist(artist)
         else:
             artist_name = artist
-            artist_id = self._query_artist_id_by_name(artist)
+            artist_id = self._query_artist_id_by_name(artist, ask)
             if not artist_id:
                 raise ValueError("I'm sorry, I couldn't find an artist whose name was an exact match for \"{0}\". "
                         "Please check the spelling and try again.".format(artist))
         return artist_id, artist_name
 
-    def create_relatives_playlist(self, artist):
+    def create_relatives_playlist(self, artist, exclude_from_parent=None):
         print("Gathering artists...")
-        artist_id, artist_name = self._load_artist(artist)
-        relative_ids = self._walk_relatives(artist_id)
+        artist_id, artist_name = self._load_artist(artist, self.ask)
+
+        relative_ids = self._walk_relatives(artist_id, self.include_root,
+                lambda visited_ids, depth: depth >= self.max_depth)
 
         print("Collecting tracks from each artist...")
         track_ids = self._gather_tracks(relative_ids)
@@ -159,7 +160,7 @@ class ArtistRelativesApp(object):
         print("Found {0} tracks across {1} artists at most {2} step(s) removed from \"{3}\"."
                 .format(len(track_ids), len(relative_ids), self.max_depth, artist_name))
         print("Creating the playlist...")
-        playlist_urls = self._create_playlist(artist_name, track_ids)
+        playlist_urls = self._create_playlist(artist_name, track_ids, self.playlist_name_format)
 
         self._display_playlist_urls(playlist_urls)
 
@@ -170,4 +171,4 @@ if __name__ == "__main__":
     spotify = get_client()
     artist_relatives_app = ArtistRelativesApp.create(
         spotify, args["playlist_name"], args["max_depth"], args["include_root"], args["ask"])
-    artist_relatives_app.create_relatives_playlist(args["artist"])
+    artist_relatives_app.create_relatives_playlist(args["seed_artist"])
