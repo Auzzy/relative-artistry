@@ -89,4 +89,4 @@ ENV/
 .ropeproject
 
 # Spotify cahced file
-.cache-metalnut4
+.cache*
