@@ -34,7 +34,7 @@ def parse_args():
     parser.add_argument("-n", "--playlist-name", default=PLAYLIST_NAME,
             help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
             "this artist's name. (default: %(default)s)"))
-    parser.add_argument("-e", "--exclude-artist", action="append",
+    parser.add_argument("-e", "--exclude-artist", action="append", default=[],
             help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Exclude "
             "this artist from the list of relatives. It can be repeated to exclude multiple artists."))
     parser.add_argument("--exclude-from-parent",
