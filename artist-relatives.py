@@ -1,6 +1,7 @@
 import argparse
 import functools
 import itertools
+import logging
 import operator
 
 import jmespath
@@ -64,6 +65,12 @@ class ArtistRelativesApp(object):
         self.include_root = include_root
         self.ask = ask
 
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter())
+        self.logger = logging.getLogger(__file__)
+        self.logger.addHandler(stream_handler)
+        self.logger.setLevel(logging.INFO)
+
     @staticmethod
     def create(spotify_client, playlist_name_format, max_depth, include_root, ask):
         spotify_wrapper = SpotifyWrapper(spotify_client)
@@ -72,12 +79,13 @@ class ArtistRelativesApp(object):
 
     def _display_playlist_urls(self, playlist_urls):
         if len(playlist_urls) == 1:
-            print("Your new playlist can be listened to here:")
+            self.logger.info("Your new playlist can be listened to here:")
         else:
-            print("Your new playlist would exceed the maximum playlist length, so multiple playlists were created.")
+            self.logger.info(
+                    "Your new playlist would exceed the maximum playlist length, so multiple playlists were created.")
     
         for playlist_url in playlist_urls:
-            print(playlist_url)
+            self.logger.info(playlist_url)
 
     def _create_playlist(self, artist_name, track_ids, playlist_name_format):
         playlist_base_name = playlist_name_format.replace("<artist>", artist_name)
@@ -120,9 +128,9 @@ class ArtistRelativesApp(object):
     def _prompt_for_artist(self, artist_ids, artist_name):
         artist_objs = [self.spotify_client.artist(artist_id) for artist_id in artist_ids]
 
-        print("Found {0} artists with the name \"{1}\".".format(len(artist_ids), artist_name))
+        self.logger.info("Found %d artists with the name \"%s\".", len(artist_ids), artist_name)
         for index, artist_obj in enumerate(artist_objs, 1):
-            print("{0}) {1}".format(index, artist_obj["external_urls"]["spotify"]))
+            self.logger.info("%d) %s", index, artist_obj["external_urls"]["spotify"])
     
         while True:
             artist_index_str = input("Please select one by entering the corresponding number and pressing ENTER: ")
@@ -163,20 +171,20 @@ class ArtistRelativesApp(object):
         excluded_artist_ids = {self._load_artist(artist)[0] for artist in excluded_artists}
         if exclude_from_parent:
             parent_id, parent_name = self._load_artist(exclude_from_parent, self.ask)
-            print("Discovering artists between {0} and {1}...".format(parent_name, artist_name))
+            self.logger.info("Discovering artists between %s and %s...", parent_name, artist_name)
             excluded_artist_ids = self._walk_relatives(parent_id, True,
                 lambda visited_ids, depth: artist_id in visited_ids)
 
-        print("Gathering artists...")
+        self.logger.info("Gathering artists...")
         relative_ids = self._walk_relatives(artist_id, self.include_root,
                 lambda visited_ids, depth: depth >= self.max_depth, excluded_artist_ids)
 
-        print("Collecting tracks from each artist...")
+        self.logger.info("Collecting tracks from each artist...")
         track_ids = self._gather_tracks(relative_ids)
 
-        print("Found {0} tracks across {1} artists at most {2} step(s) removed from \"{3}\"."
-                .format(len(track_ids), len(relative_ids), self.max_depth, artist_name))
-        print("Creating the playlist...")
+        self.logger.info("Found %d tracks across %d artists at most %d step(s) removed from \"%s\".",
+                len(track_ids), len(relative_ids), self.max_depth, artist_name)
+        self.logger.info("Creating the playlist...")
         playlist_urls = self._create_playlist(artist_name, track_ids, self.playlist_name_format)
 
         self._display_playlist_urls(playlist_urls)
