@@ -3,6 +3,7 @@ import functools
 import itertools
 import logging
 import operator
+import os
 
 import jmespath
 import spotipy
@@ -64,11 +65,12 @@ def parse_args():
 
 def get_client():
     scope_str = " ".join(SCOPES)
-    token = spotipy.util.prompt_for_user_token(CACHE_NAME, scope_str)
-    if token:
-        return spotipy.Spotify(auth=token)
-    else:
+    token = os.getenv("AUTH_TOKEN")
+    if not token:
+        token = spotipy.util.prompt_for_user_token(CACHE_NAME, scope_str)
+    if not token:
         raise Exception("Failed to retrieve an access token.")
+    return spotipy.Spotify(auth=token)
 
 class ArtistRelativesApp(object):
     def __init__(self, spotify_client, current_user, playlist_name_format, max_depth, include_root, ask, logger):
