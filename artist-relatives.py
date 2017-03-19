@@ -11,6 +11,7 @@ import spotipy.util
 from ordered_set import OrderedSet
 
 from spotify_wrapper import SpotifyWrapper
+from smartlogger import create_logger
 
 DEFAULT_DEPTH = 1
 DEFAULT_PLAYLIST_NAME = "<artist>'s Relatives"
@@ -64,9 +65,9 @@ def parse_args():
     return vars(parser.parse_args())
 
 def get_client():
-    scope_str = " ".join(SCOPES)
     token = os.getenv("AUTH_TOKEN")
     if not token:
+        scope_str = " ".join(SCOPES)
         token = spotipy.util.prompt_for_user_token(CACHE_NAME, scope_str)
     if not token:
         raise Exception("Failed to retrieve an access token.")
@@ -92,13 +93,7 @@ class ArtistRelativesApp(object):
 
     @staticmethod
     def create_logger(verbosity, name=__file__):
-        logger = logging.getLogger(name)
-        logger.setLevel(VERBOSITY_MAP[verbosity])
-        formatter = logging.Formatter()
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        logger.addHandler(stream_handler)
-        return logger
+        return create_logger(VERBOSITY_MAP[verbosity], name)
 
     def _display_playlist_urls(self, playlist_urls):
         if len(playlist_urls) == 1:
