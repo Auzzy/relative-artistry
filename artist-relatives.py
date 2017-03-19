@@ -29,38 +29,31 @@ VERBOSITY_MAP = {
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("seed_artist",
-            help=("Either the artist's exact name, or their Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). "
-            "This artist's related artists are the starting point."))
-    
+            help=("The artist's exact name or Spotify URI. (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF)."))
+
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument("-v", "--verbose", action="count",
             help=("The verbosity level. If given once, prints out a high-level summary after a couple key operations. "
             "If given twice or more, prints out a more detailed report after each operation."))
     output_group.add_argument("-s", "--silent", action="store_true", help=("Don't output anything to standard out."))
-    
+
     parser.add_argument("-d", "--max-depth", type=int, default=DEFAULT_DEPTH,
-            help=("The maximum depth to traverse the related artist list. A depth of 0 gets just the artist. It's "
-            "recommended that this value not exceed 3, as it will start taking a long time and producing very large "
-            "(and unrelated) playlists. (default: %(default)s)"))
+            help=("Depth to traverse the related artist list. I recommend this not exceed 3, as it will start taking a "
+            "long time and producing very large (and unrelated) playlists. (default: %(default)s)"))
     parser.add_argument("--include-root", action="store_true",
-            help=("Toggles inclusion of the root artist in the playlist. Note that if --max-depth is 0, this will be "
-            "turned on. (default: %(default)s)"))
+            help=("Toggles inclusion of the seed artist in the playlist. (default: %(default)s)"))
     parser.add_argument("--ask", action="store_true",
             help=("By default, if the search finds two artists with the same exact name you specified, it will use "
             "the most popular one as the root artist. Use this option to have it prompt you to choose instead."))
     parser.add_argument("-n", "--playlist-name", default=DEFAULT_PLAYLIST_NAME,
-            help=("What to name the resulting playlist. The special variable \"<artist>\" can be used to substitute "
-            "this artist's name. (default: %(default)s)"))
+            help=("Playlist name format. Use <artist> to substitute the seed artist's name."))
     parser.add_argument("-e", "--exclude-artist", action="append", default=[],
-            help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Exclude "
-            "this artist from the list of relatives. It can be repeated to exclude multiple artists."))
+            help=("Artist name or Spotify URI. Exclude this artist from the list of relatives. Repeat this argument to "
+            "exclude multiple artists."))
     parser.add_argument("--exclude-from-parent",
-            help=("This should be an artist name or Spotify URI (e.g. spotify:artist:0OdUWJ0sBjDrqHygGUXeCF). Starting "
-            "with this artist, walk their related artists tree until the seed artist is encountered. All artists "
-            "between them, including artists on the same level, are excluded.\n"
-            "For example, if Arcade Fire is the seed artist and Muse is the exlude-from-parent, Muse's direct related "
-            "artists and their direct related artists will be exlcuded, for a max of 420 artists excluded (probably "
-            "far less due to duplicates)."))
+            help=("An artist name or Spotify URI. Walk this artist's related artists tree until the seed artist is "
+            "encountered. All artists between them, including artists on the same level, are excluded from the "
+            "playlist."))
 
     return vars(parser.parse_args())
 
