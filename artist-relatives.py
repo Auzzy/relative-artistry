@@ -178,7 +178,7 @@ class ArtistRelativesApp(object):
     def _load_artist(self, artist, ask=False):
         if self.spotify_client.is_artist_uri(artist):
             self.logger.debug("Artist URI provided. Loading other info.")
-            artist_name, artist_id = self.spotify_client.get_artist(artist)
+            artist_id, artist_name = self.spotify_client.get_artist(artist)
         else:
             self.logger.debug("Artist name provided. Searching for artist ID (and other info) by name.")
             artist_name = artist
