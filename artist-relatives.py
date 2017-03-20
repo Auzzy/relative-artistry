@@ -5,13 +5,14 @@ import logging
 import operator
 import os
 
-import jmespath
 import spotipy
 import spotipy.util
 from ordered_set import OrderedSet
 
-from spotify_wrapper import SpotifyWrapper
-from smartlogger import create_logger
+import smartlogger
+import spotify_wrapper
+import search_selectors
+
 
 DEFAULT_DEPTH = 1
 DEFAULT_PLAYLIST_NAME = "<artist>'s Relatives"
@@ -25,6 +26,13 @@ VERBOSITY_MAP = {
     1: logging.INFO,
     2: logging.DEBUG
 }
+SELECTORS = {
+    "most-popular": search_selectors.MostPopular,
+    "most-followed": search_selectors.MostFollowed,
+    "halt": search_selectors.Halt
+}
+LOWER_FIRST = lambda string: (string[0].lower() + string[1:])
+SELECTOR_HELP_STRS = ['"{0}" {1}'.format(key, LOWER_FIRST(value.DESCRIPTION)[:-1]) for key, value in SELECTORS.items()]
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -42,9 +50,15 @@ def parse_args():
             "long time and producing very large (and unrelated) playlists. (default: %(default)s)"))
     parser.add_argument("--include-root", action="store_true",
             help=("Toggles inclusion of the seed artist in the playlist. (default: %(default)s)"))
+    '''
     parser.add_argument("--ask", action="store_true",
             help=("By default, if the search finds two artists with the same exact name you specified, it will use "
             "the most popular one as the root artist. Use this option to have it prompt you to choose instead."))
+    '''
+    parser.add_argument("--search-selector", default="halt", choices=SELECTORS.keys(),
+            help=("Strategy for selecting an artist when multiple are found matching the seed artist. "
+            "{0} (default: %(default)s)")
+                .format(", ".join(SELECTOR_HELP_STRS[:-1] + [" and " + SELECTOR_HELP_STRS[-1]])))
     parser.add_argument("-n", "--playlist-name", default=DEFAULT_PLAYLIST_NAME,
             help=("Playlist name format. Use <artist> to substitute the seed artist's name."))
     parser.add_argument("-e", "--exclude-artist", action="append", default=[],
@@ -67,26 +81,22 @@ def get_client():
     return spotipy.Spotify(auth=token)
 
 class ArtistRelativesApp(object):
-    def __init__(self, spotify_client, current_user, playlist_name_format, max_depth, include_root, ask, logger):
+    def __init__(self, spotify_client, current_user, playlist_name_format, max_depth, include_root, selector, logger):
         self.spotify_client = spotify_client
         self.current_user = current_user
         self.playlist_name_format = playlist_name_format
         self.max_depth = max_depth
         self.include_root = include_root
-        self.ask = ask
+        self.selector = selector
         self.logger = logger
 
     @staticmethod
-    def create(spotify_client, playlist_name_format, max_depth, include_root, ask, verbosity):
-        spotify_wrapper = SpotifyWrapper(spotify_client)
-        current_user = spotify_wrapper.get_current_user()
-        logger = ArtistRelativesApp.create_logger(verbosity)
-        return ArtistRelativesApp(spotify_wrapper, current_user, playlist_name_format, max_depth, include_root, ask,
-                logger)
-
-    @staticmethod
-    def create_logger(verbosity, name=__file__):
-        return create_logger(VERBOSITY_MAP[verbosity], name)
+    def create(spotify_client, playlist_name_format, max_depth, include_root, selector_name, verbosity):
+        client = spotify_wrapper.SpotifyWrapper(spotify_client)
+        current_user = client.get_current_user()
+        logger = smartlogger.create_logger(VERBOSITY_MAP[verbosity], __file__)
+        selector = SELECTORS[selector_name]()
+        return ArtistRelativesApp(client, current_user, playlist_name_format, max_depth, include_root, selector, logger)
 
     def _display_playlist_urls(self, playlist_urls):
         if len(playlist_urls) == 1:
@@ -145,6 +155,7 @@ class ArtistRelativesApp(object):
             relative_ids -= OrderedSet((root_artist_id,))
         return relative_ids
 
+    '''
     def _prompt_for_artist(self, artist_ids, artist_name):
         artist_objs = [self.spotify_client.artist(artist_id) for artist_id in artist_ids]
 
@@ -158,42 +169,36 @@ class ArtistRelativesApp(object):
                 artist_index = int(artist_index_str)
                 if artist_index <= len(artist_obj) and artist_index > 0:
                     return artist_objs[artist_index - 1]
+    '''
 
-    def _query_artist_id_by_name(self, artist_name, ask=False):
+    def _query_artist_id_by_name(self, artist_name):
         exact_matches = self.spotify_client.search_artist_ids(artist_name)
         if not exact_matches:
             return None
 
         self.logger.debug("%d match(es) found for %s.", len(exact_matches), artist_name)
-        if len(exact_matches) > 1:
-            if ask:
-                artist_obj = self._prompt_for_artist([match["id"] for match in exact_matches], artist_name)
-            else:
-                artist_obj = sorted(exact_matches, key=lambda artist: artist["popularity"], reverse=True)[0]
-        else:
-            artist_obj = exact_matches[0]
-
+        artist_obj = self.selector.select(exact_matches)
         return artist_obj["id"]
 
-    def _load_artist(self, artist, ask=False):
+    def _load_artist(self, artist):
         if self.spotify_client.is_artist_uri(artist):
             self.logger.debug("Artist URI provided. Loading other info.")
             artist_id, artist_name = self.spotify_client.get_artist(artist)
         else:
             self.logger.debug("Artist name provided. Searching for artist ID (and other info) by name.")
             artist_name = artist
-            artist_id = self._query_artist_id_by_name(artist, ask)
+            artist_id = self._query_artist_id_by_name(artist)
             if not artist_id:
                 raise ValueError("I'm sorry, I couldn't find an artist whose name was an exact match for \"{0}\". "
                         "Please check the spelling and try again.".format(artist))
         return artist_id, artist_name
 
     def create_relatives_playlist(self, artist, excluded_artists=[], exclude_from_parent=None):
-        artist_id, artist_name = self._load_artist(artist, self.ask)
+        artist_id, artist_name = self._load_artist(artist)
 
         excluded_artist_ids = {self._load_artist(artist)[0] for artist in excluded_artists}
         if exclude_from_parent:
-            parent_id, parent_name = self._load_artist(exclude_from_parent, self.ask)
+            parent_id, parent_name = self._load_artist(exclude_from_parent)
             self.logger.info("Discovering artists between %s and %s...", parent_name, artist_name)
             excluded_artist_ids = self._walk_relatives(parent_id, True,
                     lambda visited_ids, depth: artist_id in visited_ids)
@@ -220,6 +225,6 @@ if __name__ == "__main__":
 
     spotify = get_client()
     artist_relatives_app = ArtistRelativesApp.create(spotify, args["playlist_name"], args["max_depth"],
-            args["include_root"], args["ask"], verbosity)
+            args["include_root"], args["search_selector"], verbosity)
     artist_relatives_app.create_relatives_playlist(args["seed_artist"], args["exclude_artist"],
             args["exclude_from_parent"])

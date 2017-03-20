@@ -3,7 +3,7 @@ import jmespath
 
 ALBUM_ID_PATH = jmespath.compile("items[?length(@.artists)==`1`].id")
 RELATED_ARTIST_ID_PATH = jmespath.compile("artists[*].id")
-SEARCH_ARTIST_ID_PATH_FORMAT = "artists.items[?name=='{artist_name}'].{{id: id, popularity: popularity}}"
+SEARCH_ARTIST_ID_PATH_FORMAT = "artists.items[?name=='{artist_name}']"
 TRACK_ID_PATH = jmespath.compile("items[*].id")
 DEFAULT_NEXT_PATH = jmespath.compile("next")
 SEARCH_ARTIST_NEXT_PATH = jmespath.compile("artists.next")
