@@ -1,4 +1,5 @@
 import argparse
+import collections
 import functools
 import itertools
 import logging
@@ -26,13 +27,13 @@ VERBOSITY_MAP = {
     1: logging.INFO,
     2: logging.DEBUG
 }
-SELECTORS = {
-    "most-popular": search_selectors.MostPopular,
-    "most-followed": search_selectors.MostFollowed,
-    "halt": search_selectors.Halt
-}
+SELECTORS = collections.OrderedDict([
+    ("most-popular", search_selectors.MostPopular),
+    ("most-followed", search_selectors.MostFollowed),
+    ("halt", search_selectors.Halt)
+])
 LOWER_FIRST = lambda string: (string[0].lower() + string[1:])
-SELECTOR_HELP_STRS = ['"{0}" {1}'.format(key, LOWER_FIRST(value.DESCRIPTION)[:-1]) for key, value in SELECTORS.items()]
+SELECTOR_HELP_STRS = ["{0} {1}".format(key, LOWER_FIRST(value.DESCRIPTION)[:-1]) for key, value in SELECTORS.items()]
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -50,11 +51,6 @@ def parse_args():
             "long time and producing very large (and unrelated) playlists. (default: %(default)s)"))
     parser.add_argument("--include-root", action="store_true",
             help=("Toggles inclusion of the seed artist in the playlist. (default: %(default)s)"))
-    '''
-    parser.add_argument("--ask", action="store_true",
-            help=("By default, if the search finds two artists with the same exact name you specified, it will use "
-            "the most popular one as the root artist. Use this option to have it prompt you to choose instead."))
-    '''
     parser.add_argument("--search-selector", default="halt", choices=SELECTORS.keys(),
             help=("Strategy for selecting an artist when multiple are found matching the seed artist. "
             "{0} (default: %(default)s)")
@@ -154,22 +150,6 @@ class ArtistRelativesApp(object):
         if not include_root:
             relative_ids -= OrderedSet((root_artist_id,))
         return relative_ids
-
-    '''
-    def _prompt_for_artist(self, artist_ids, artist_name):
-        artist_objs = [self.spotify_client.artist(artist_id) for artist_id in artist_ids]
-
-        self.logger.info("Found %d artists with the name \"%s\".", len(artist_ids), artist_name)
-        for index, artist_obj in enumerate(artist_objs, 1):
-            self.logger.info("%d) %s", index, artist_obj["external_urls"]["spotify"])
-    
-        while True:
-            artist_index_str = input("Please select one by entering the corresponding number and pressing ENTER: ")
-            if artist_index_str.isdigit():
-                artist_index = int(artist_index_str)
-                if artist_index <= len(artist_obj) and artist_index > 0:
-                    return artist_objs[artist_index - 1]
-    '''
 
     def _query_artist_id_by_name(self, artist_name):
         exact_matches = self.spotify_client.search_artist_ids(artist_name)
